@@ -1,0 +1,17 @@
+[package]
+name = "myos-kernel"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+limine = "0.5.0"
+font8x8 = { version = "0.3.1", default-features = false, features = ["unicode"] }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1
+opt-level = 2
