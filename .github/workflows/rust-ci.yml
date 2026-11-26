@@ -21,5 +21,5 @@ jobs:
         env:
           RUSTFLAGS: -C relocation-model=static -C link-arg=-Tlinker-x86_64.ld
         run: |
-          cargo check --locked --target x86_64-unknown-none
-          cargo build --locked --release --target x86_64-unknown-none
+          cargo check  --target x86_64-unknown-none
+          cargo build  --release --target x86_64-unknown-none
