@@ -1,0 +1,25 @@
+name: Rust kernel CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install target
+        run: rustup target add x86_64-unknown-none
+      - name: Check kernel
+        working-directory: kernel
+        env:
+          RUSTFLAGS: -C relocation-model=static -C link-arg=-Tlinker-x86_64.ld
+        run: |
+          cargo check --locked --target x86_64-unknown-none
+          cargo build --locked --release --target x86_64-unknown-none
