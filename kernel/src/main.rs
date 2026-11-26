@@ -1,5 +1,5 @@
-#![ o_std]
-#![ o_main]
+#![no_std]
+#![no_main]
 
 use core::arch::asm;
 use limine::BaseRevision;
@@ -20,7 +20,7 @@ static REQUESTS_END: RequestsEndMarker = RequestsEndMarker::new();
 
 unsafe fn outb(port: u16, value: u8) {
     unsafe {
- asm!("out dx, al", in("dx") port, in("al") value, options( omem, nostack, preserves_flags));
+ asm!("out dx, al", in("dx") port, in("al") value, options(nomem, nostack, preserves_flags));
     }
 }
 
@@ -84,6 +84,6 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 
 fn halt() -> ! {
     loop {
-        unsafe { asm!("cli; hlt", options( omem, nostack)); }
+        unsafe { asm!("cli; hlt", options(nomem, nostack)); }
     }
 }
