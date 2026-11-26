@@ -70,21 +70,21 @@ fn paint_framebuffer() -> bool {
 #[unsafe(no_mangle)]
 unsafe extern "C" fn kmain() -> ! {
     serial_init();
-    serial_write("MyOS kernel starting... r ");
+    serial_write("MyOS kernel starting");
     if !BASE_REVISION.is_supported() {
-        serial_write("ERROR: unsupported Limine base revision r ");
+        serial_write("ERROR: unsupported Limine base revision");
         halt();
     }
     if !paint_framebuffer() {
-        serial_write("ERROR: no usable framebuffer response r ");
+        serial_write("ERROR: no usable framebuffer response");
         halt();
     }
-    serial_write("MyOS framebuffer initialized r ");
-    serial_write("MYOS_BOOT_OK r ");
+    serial_write("MyOS framebuffer initialized");
+    serial_write("MYOS_BOOT_OK");
     halt()
 }
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
-    serial_write("MYOS_PANIC r ");
+    serial_write("MYOS_PANIC");
     halt()
 }
