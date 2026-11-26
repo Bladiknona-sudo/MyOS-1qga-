@@ -1,0 +1,108 @@
+name: Build MyOS ISO
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: myos-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build kernel and bootable ISO
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xorriso qemu-system-x86 curl tar
+
+      - name: Install Rust target
+        run: rustup target add x86_64-unknown-none
+
+      - name: Compile kernel
+        working-directory: kernel
+        env:
+          RUSTFLAGS: -C relocation-model=static -C link-arg=-Tlinker-x86_64.ld
+        run: cargo build --locked --release --target x86_64-unknown-none
+
+      - name: Download Limine 12.9.6 binary release
+        run: |
+          mkdir -p build/limine
+          curl --fail --location --retry 3 https://github.com/limine-bootloader/limine/releases/download/v12.9.6/limine-binary.tar.gz -o build/limine/limine.tar.gz
+          tar -xzf build/limine/limine.tar.gz -C build/limine
+          find build/limine -type f -name limine-bios.sys -print -quit | grep .
+          find build/limine -type f -name limine-bios-cd.bin -print -quit | grep .
+          find build/limine -type f -name limine-uefi-cd.bin -print -quit | grep .
+          find build/limine -type f -name BOOTX64.EFI -print -quit | grep .
+
+      - name: Assemble BIOS and UEFI hybrid ISO
+        run: |
+          ROOT=build/iso-root
+          mkdir -p "$ROOT/boot/limine" "$ROOT/EFI/BOOT" build/output
+          cp kernel/target/x86_64-unknown-none/release/myos-kernel "$ROOT/boot/kernel"
+          cp limine.conf "$ROOT/limine.conf"
+          cp "$(find build/limine -name limine-bios.sys -type f -print -quit)" "$ROOT/boot/limine/limine-bios.sys"
+          cp "$(find build/limine -name limine-bios-cd.bin -type f -print -quit)" "$ROOT/boot/limine/limine-bios-cd.bin"
+          cp "$(find build/limine -name limine-uefi-cd.bin -type f -print -quit)" "$ROOT/boot/limine/limine-uefi-cd.bin"
+          cp "$(find build/limine -name BOOTX64.EFI -type f -print -quit)" "$ROOT/EFI/BOOT/BOOTX64.EFI"
+          xorriso -as mkisofs -R -r -J \
+            -b boot/limine/limine-bios-cd.bin \
+            -no-emul-boot -boot-load-size 4 -boot-info-table \
+            --efi-boot boot/limine/limine-uefi-cd.bin \
+            -efi-boot-part --efi-boot-image --protective-msdos-label \
+            "$ROOT" -o build/output/MyOS-amd64.iso
+          LIMINE_BIN="$(find build/limine -type f -name limine -perm -u+x -print -quit)"
+          test -n "$LIMINE_BIN"
+          "$LIMINE_BIN" bios-install build/output/MyOS-amd64.iso
+          xorriso -indev build/output/MyOS-amd64.iso -report_el_torito as_mkisofs > build/output/boot-report.txt
+          grep -q 'BIOS' build/output/boot-report.txt
+          grep -q 'UEFI' build/output/boot-report.txt
+          sha256sum build/output/MyOS-amd64.iso > build/output/SHA256SUMS
+
+      - name: BIOS QEMU boot smoke test
+        run: |
+          mkdir -p build/test
+          set +e
+          timeout 12s qemu-system-x86_64 -machine q35 -m 256M -cdrom build/output/MyOS-amd64.iso -boot d -display none -serial file:build/test/serial.log -monitor none -no-reboot -no-shutdown
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -ne 124 ] && [ "$STATUS" -ne 0 ]; then
+            echo "QEMU exited unexpectedly: $STATUS"
+            cat build/test/serial.log || true
+            exit 1
+          fi
+          grep -q 'MYOS_BOOT_OK' build/test/serial.log
+          echo "BIOS QEMU smoke test passed."
+
+      - name: Upload ISO and diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyOS-ISO-${{ github.sha }}
+          path: |
+            build/output/MyOS-amd64.iso
+            build/output/SHA256SUMS
+            build/output/boot-report.txt
+            build/test/serial.log
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Build summary
+        if: always()
+        run: |
+          echo "## MyOS ISO build" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f build/output/MyOS-amd64.iso ]; then
+            ls -lh build/output/MyOS-amd64.iso >> "$GITHUB_STEP_SUMMARY"
+            cat build/output/SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "ISO was not produced; inspect the failed step logs." >> "$GITHUB_STEP_SUMMARY"
+          fi
