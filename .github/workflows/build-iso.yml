@@ -33,7 +33,7 @@ jobs:
         working-directory: kernel
         env:
           RUSTFLAGS: -C relocation-model=static -C link-arg=-Tlinker-x86_64.ld
-        run: cargo build --locked --release --target x86_64-unknown-none
+        run: cargo build  --release --target x86_64-unknown-none
 
       - name: Download Limine 12.9.6 binary release
         run: |
